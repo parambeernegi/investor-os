@@ -1,0 +1,68 @@
+// Investor OS's own Prisma schema — points at the SAME Postgres database as
+// launchpad_v5's backend (same DATABASE_URL). It declares only the columns on
+// Startup that Investor OS touches, plus the InvPipelineItem model verbatim
+// (same table, same relation) and a minimal Interview model used only to
+// count interviews for the investor-update generator.
+//
+// IMPORTANT: launchpad_v5 remains the sole owner of schema changes for these
+// tables. This app must never run `prisma db push` or `prisma migrate` —
+// only `prisma generate` (to produce a typed client from the schema below).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Startup {
+  id                 String   @id
+  userId             String
+  name               String
+  problem            String   @default("")
+  stage              String   @default("idea")
+  founderStage       String   @default("")
+  market             String   @default("new")
+  irl                Int      @default(1)
+  revenue            Int      @default(0)
+  invRound           Json?    @default("null")
+  invRounds          Json     @default("[]")
+  invTasks           Json     @default("[]")
+  invCustomInvestors Json     @default("[]")
+  invSavedSearches   Json     @default("[]")
+  invUpdates         Json     @default("[]")
+  invPipeline        InvPipelineItem[]
+  interviews         Interview[]
+  updatedAt          DateTime @updatedAt
+}
+
+model InvPipelineItem {
+  id           String   @id @default(cuid())
+  startupId    String
+  startup      Startup  @relation(fields: [startupId], references: [id], onDelete: Cascade)
+  invId        String
+  stage        String   @default("research")
+  notes        String   @default("")
+  nextAction   String   @default("")
+  nextDate     String   @default("")
+  fitScore     Int      @default(50)
+  activities   Json     @default("[]")
+  prob         Int?
+  probManual   Boolean  @default(false)
+  warmIntro    String   @default("")
+  checkAmount  Int?
+  interactions Int?
+  lastContact  String   @default("")
+  addedAt      DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+}
+
+// Declared only to support a count query for the investor-update generator
+// (project.interviews.length in the original embedded page) — no other field is read.
+model Interview {
+  id        String  @id @default(cuid())
+  startupId String
+  startup   Startup @relation(fields: [startupId], references: [id], onDelete: Cascade)
+}
