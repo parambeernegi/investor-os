@@ -4,7 +4,7 @@ import { useState, useMemo, useEffect } from 'react'
 import { INVESTOR_DB, INV_STAGES } from '../../lib/data/investors'
 import { T, uid } from '../../lib/theme'
 import { aiApi, investorApi, InvestorData, InvPipeItem, StartupContext } from '../../lib/api'
-import { LAUNCHPAD_APP_URL } from '../../lib/auth'
+import { LAUNCHPAD_APP_URL, getHiddenPages } from '../../lib/auth'
 
 // Local equivalents of launchpad_v5's store/startup.ts types — this app has no
 // global store, so these are just plain shapes for the JSON passthrough fields.
@@ -13,7 +13,7 @@ interface InvTask { id:string; title:string; due:string|null; priority:string; d
 interface CustomInvestor { id:string; name:string; emoji:string; type:string; stage:string[]; sectors:string[]; geo:string; minIrl:number; checkMin:number; checkMax:number; checkLabel:string; thesis:string; portfolio:string[]; website:string; activity:string; custom:boolean }
 interface SavedSearch { id:string; name:string; q:string; type:string; stage:string; sector:string; geo:string }
 
-type Tab = 'discover'|'pipeline'|'tasks'|'updates'|'analytics'|'outreach'
+type Tab = 'dashboard'|'discover'|'pipeline'|'tasks'|'updates'|'analytics'|'outreach'
 
 const ACTIVITY_TYPES = [
   {id:'note',label:'📝 Note'},{id:'call',label:'📞 Call'},
@@ -126,7 +126,8 @@ export default function InvestorOS() {
   const [appData, setAppData] = useState<InvestorData | null>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
 
-  const [tab, setTab] = useState<Tab>('discover')
+  const [tab, setTab] = useState<Tab>('dashboard')
+  const [hiddenPages] = useState<string[]>(() => getHiddenPages())
   const [search, setSearch] = useState('')
   const [filterType, setFilterType] = useState('all')
   const [filterStage, setFilterStage] = useState('all')
@@ -573,7 +574,8 @@ export default function InvestorOS() {
     {n:responseRate, l:'Response Rate', tab:'pipeline'},
   ]
 
-  const TABS: {id:Tab;label:string}[] = [
+  const ALL_TABS: {id:Tab;label:string}[] = [
+    {id:'dashboard', label:'🏠 Dashboard'},
     {id:'discover', label:'🔍 Discover'},
     {id:'pipeline', label:'📋 Pipeline'},
     {id:'tasks', label:'✅ Tasks'},
@@ -581,6 +583,7 @@ export default function InvestorOS() {
     {id:'analytics', label:'📊 Analytics'},
     {id:'outreach', label:'✉️ Outreach'},
   ]
+  const TABS: {id:Tab;label:string}[] = ALL_TABS.filter(t => t.id === 'dashboard' || !hiddenPages.includes(t.id))
 
   return (
     <div style={{maxWidth:1400,margin:'0 auto',padding:24,fontFamily:'system-ui'}}>
@@ -645,6 +648,71 @@ export default function InvestorOS() {
           <button key={t.id} onClick={()=>setTab(t.id)} style={{padding:'8px 16px',fontSize:12,fontWeight:600,background:'none',border:'none',borderBottom:tab===t.id?`2px solid ${T.orange}`:'2px solid transparent',color:tab===t.id?T.orange:T.mid,cursor:'pointer',fontFamily:'system-ui',whiteSpace:'nowrap'}}>{t.label}</button>
         ))}
       </div>
+
+      {/* ══════════ DASHBOARD ══════════ */}
+      {tab==='dashboard' && (
+        <div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:14,marginBottom:14}}>
+            <div style={{background:T.white,border:`1px solid ${T.border}`,borderRadius:6,padding:'14px 16px'}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.navy,marginBottom:10}}>🎯 Recommended Next Actions</div>
+              <div style={{display:'flex',flexDirection:'column',gap:7}}>
+                {nextActions.map((a,i)=>(
+                  <div key={i} style={{display:'flex',gap:10,alignItems:'flex-start',padding:'10px 12px',background:T.paper,borderRadius:8,borderLeft:`3px solid ${T.orange}`}}>
+                    <div style={{fontSize:18}}>{a.icon}</div>
+                    <div style={{flex:1,fontSize:12,color:T.ink,lineHeight:1.5}}>{a.text}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div style={{background:T.white,border:`1px solid ${T.border}`,borderRadius:6,padding:'14px 16px'}}>
+              <div style={{fontSize:12,fontWeight:700,color:T.navy,marginBottom:12}}>Pipeline Funnel <span style={{fontSize:11,color:T.mid,fontWeight:400}}>{fmtM(pipeline.reduce((a,p)=>a+(p.checkAmount||0),0))} total</span></div>
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {INV_STAGES.map(st=>{
+                  const count = byStage[st.id]?.length || 0
+                  const total = pipeline.length || 1
+                  const pct = Math.round(count/total*100)
+                  return (
+                    <div key={st.id} style={{display:'flex',alignItems:'center',gap:10}}>
+                      <div style={{width:130,fontSize:11,color:T.mid,textAlign:'right',paddingRight:8}}>{st.label}</div>
+                      <div style={{flex:1,height:20,background:T.paper,borderRadius:5,overflow:'hidden'}}><div style={{height:'100%',width:`${pct}%`,background:st.color,borderRadius:5,transition:'width .5s'}}/></div>
+                      <div style={{width:30,fontSize:11,fontWeight:700,color:T.navy,paddingLeft:6}}>{count}</div>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          </div>
+          <div style={{background:T.white,border:`1px solid ${T.border}`,borderRadius:6,padding:'14px 16px'}}>
+            <div style={{fontSize:12,fontWeight:700,color:T.navy,marginBottom:10}}>✅ Tasks</div>
+            {overdueTasks.length>0 && (
+              <div style={{marginBottom:10}}>
+                <div style={{fontSize:10,color:T.red,fontFamily:'Courier New',textTransform:'uppercase',marginBottom:6}}>Overdue ({overdueTasks.length})</div>
+                <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                  {overdueTasks.slice(0,5).map(t=>(
+                    <div key={t.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:T.ink,padding:'6px 10px',background:T.paper,borderRadius:6,borderLeft:`3px solid ${T.red}`}}>
+                      <span>{t.title}</span>
+                      <span style={{color:T.mid,fontSize:11}}>{new Date(t.due).toLocaleDateString()}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+            <div style={{fontSize:10,color:T.mid,fontFamily:'Courier New',textTransform:'uppercase',marginBottom:6}}>Upcoming ({upcomingTasks.length})</div>
+            {upcomingTasks.length===0 ? (
+              <div style={{fontSize:12,color:T.mid,fontStyle:'italic'}}>No upcoming tasks.</div>
+            ) : (
+              <div style={{display:'flex',flexDirection:'column',gap:5}}>
+                {upcomingTasks.slice(0,5).map(t=>(
+                  <div key={t.id} style={{display:'flex',justifyContent:'space-between',fontSize:12,color:T.ink,padding:'6px 10px',background:T.paper,borderRadius:6}}>
+                    <span>{t.title}</span>
+                    <span style={{color:T.mid,fontSize:11}}>{t.due ? new Date(t.due).toLocaleDateString() : '—'}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* ══════════ DISCOVER ══════════ */}
       {tab==='discover' && (
